@@ -1,6 +1,6 @@
 const express = require('express');
 const documentsRoutes = require('./routes/documents.routes');
-const { port } = require('./config');
+const { port, maxFileSizeBytes } = require('./config');
 
 const app = express();
 
@@ -8,6 +8,10 @@ app.use(express.json());
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.get('/config', (req, res) => {
+  res.json({ maxFileSizeBytes });
 });
 
 app.use(documentsRoutes);

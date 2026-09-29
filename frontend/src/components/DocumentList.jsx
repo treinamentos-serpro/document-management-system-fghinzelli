@@ -1,4 +1,5 @@
 import DownloadButton from './DownloadButton.jsx';
+import { formatFileSize } from '../utils/formatFileSize.js';
 
 export default function DocumentList({ documents, isLoading, error, onRefresh }) {
   return (
@@ -66,18 +67,4 @@ function formatDate(value) {
     return 'Data indisponível';
   }
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(date);
-}
-
-function formatFileSize(size) {
-  if (size < 1024) {
-    return `${size} B`;
-  }
-  const units = ['KB', 'MB', 'GB'];
-  let value = size / 1024;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${units[unitIndex]}`;
 }

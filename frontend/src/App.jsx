@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import DocumentList from './components/DocumentList.jsx';
 import UploadComponent from './components/UploadComponent.jsx';
-import { listDocuments } from './services/documentsApi.js';
+import { getUploadLimit, listDocuments } from './services/documentsApi.js';
 import './App.css';
 
 export default function App() {
@@ -10,6 +10,17 @@ export default function App() {
   const [loadError, setLoadError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [announcement, setAnnouncement] = useState('');
+  const [maxFileSizeBytes, setMaxFileSizeBytes] = useState(null);
+
+  useEffect(() => {
+    let isCurrent = true;
+    getUploadLimit()
+      .then((limit) => {
+        if (isCurrent) setMaxFileSizeBytes(limit);
+      })
+      .catch(() => {});
+    return () => { isCurrent = false; };
+  }, []);
 
   useEffect(() => {
     let isCurrent = true;
@@ -71,7 +82,7 @@ export default function App() {
         </div>
 
         <div className="workspace-grid">
-          <UploadComponent onUploaded={handleUploadComplete} />
+          <UploadComponent onUploaded={handleUploadComplete} maxFileSizeBytes={maxFileSizeBytes} />
           <DocumentList
             documents={documents}
             isLoading={isLoading}

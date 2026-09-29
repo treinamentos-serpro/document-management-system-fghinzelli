@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
 async function request(path, options) {
   let response;
@@ -26,6 +26,12 @@ export async function listDocuments() {
   const response = await request('/documents');
   const payload = await response.json();
   return payload.documents;
+}
+
+export async function getUploadLimit() {
+  const response = await request('/config');
+  const payload = await response.json();
+  return payload.maxFileSizeBytes;
 }
 
 export async function uploadDocument(file) {

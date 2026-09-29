@@ -1,4 +1,5 @@
 const fs = require('node:fs/promises');
+const { constants } = require('node:fs');
 const path = require('node:path');
 const { storageDir } = require('../config');
 
@@ -35,19 +36,30 @@ function findById(id) {
   return document ? { ...document } : null;
 }
 
-async function getFilePath(storageKey) {
+async function openFile(storageKey) {
   const filePath = resolveStoragePath(storageKey);
+  let fileHandle;
   try {
-    await fs.access(filePath);
+    fileHandle = await fs.open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const stats = await fileHandle.stat();
+    if (!stats.isFile()) {
+      await fileHandle.close();
+      const error = new Error('Arquivo do documento não encontrado.');
+      error.code = 'DOCUMENT_FILE_NOT_FOUND';
+      throw error;
+    }
+    return { fileHandle, size: stats.size };
   } catch (error) {
-    if (error.code === 'ENOENT') {
+    if (fileHandle && error.code !== 'DOCUMENT_FILE_NOT_FOUND') {
+      await fileHandle.close();
+    }
+    if (error.code === 'ENOENT' || error.code === 'ELOOP') {
       const notFoundError = new Error('Arquivo do documento não encontrado.');
       notFoundError.code = 'DOCUMENT_FILE_NOT_FOUND';
       throw notFoundError;
     }
     throw error;
   }
-  return filePath;
 }
 
 async function removeFile(storageKey) {
@@ -58,6 +70,6 @@ module.exports = {
   create,
   list,
   findById,
-  getFilePath,
+  openFile,
   removeFile,
 };

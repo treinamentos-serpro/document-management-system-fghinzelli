@@ -95,7 +95,7 @@ A estrutura pública de um documento é:
 
 ### `POST /api/upload`
 
-Recebe um único arquivo `multipart/form-data` no campo `file`. Campos adicionais são ignorados; não se aceita mais de um arquivo por requisição. Não há allowlist de tipo MIME no MVP. O MIME informado pelo cliente não deve ser tratado como verificação de conteúdo.
+Recebe um único arquivo `multipart/form-data` no campo `file`. Até oito campos adicionais de até 1024 bytes cada são ignorados; não se aceita mais de um arquivo por requisição. Não há allowlist de tipo MIME no MVP. O MIME informado pelo cliente não deve ser tratado como verificação de conteúdo.
 
 **Sucesso — `201 Created`**
 
@@ -109,9 +109,14 @@ Corpo: objeto público `Documento` descrito na seção 5.
 | --- | --- | --- |
 | `400 Bad Request` | `FILE_REQUIRED` | Campo `file` ausente ou vazio. |
 | `413 Payload Too Large` | `FILE_TOO_LARGE` | Arquivo acima de `MAX_FILE_SIZE_BYTES`. |
+| `400 Bad Request` | `INVALID_FIELD` | Quantidade ou tamanho de campos adicionais excede o limite. |
 | `500 Internal Server Error` | `UPLOAD_FAILED` | Falha ao gravar o arquivo ou registrar metadados. A resposta não inclui detalhes internos. |
 
 Se o arquivo for gravado, mas o registro de metadados falhar, o backend deve tentar remover o arquivo criado para evitar órfão. Uma falha nessa limpeza deve ser registrada em log sem expor caminhos na resposta HTTP.
+
+### `GET /api/config`
+
+Retorna `{ "maxFileSizeBytes": 10485760 }` (ou o limite efetivo configurado) para a interface mostrar o tamanho máximo de upload. Não contém segredos nem caminhos locais.
 
 ### `GET /api/documents`
 
@@ -195,6 +200,13 @@ O status HTTP é a fonte de verdade para a categoria do erro. Códigos são est�
 Os arquivos são persistidos em disco, mas os metadados são voláteis. Após reiniciar o processo, os arquivos anteriores podem continuar em `STORAGE_DIR`, mas não estarão disponíveis pela API porque seus registros em memória foram perdidos. A remoção automática ou reconciliação desses arquivos não faz parte do MVP. Essa limitação deve ser aceita para o estágio inicial e revista antes de uso que exija durabilidade.
 
 Sem autenticação, `owner` é apenas metadado atribuído localmente. A API não deve apresentar essa configuração como controle de acesso nem como separação de dados por usuário.
+
+### Implantação fora do ambiente local
+
+- Configure o servidor ou proxy reverso para encaminhar `/api/*` ao backend, removendo o prefixo `/api`, como faz o Vite no desenvolvimento. Alternativamente, defina `VITE_API_BASE_URL` ao compilar o frontend; uma origem diferente exige configuração de CORS adequada.
+- Não exponha a API a usuários não confiáveis sem autenticação e autorização por documento. Uma chave pública embutida no frontend não substitui autenticação. Proteja o acesso no proxy enquanto não houver sessões e identidade de usuário no backend.
+- Mantenha `STORAGE_DIR` acessível apenas ao processo da aplicação. Limite requisições, volume de uploads e espaço em disco no proxy/ambiente de execução; `MAX_FILE_SIZE_BYTES` controla apenas cada arquivo individualmente.
+- Arquivos continuam no disco após reinício, mas seus metadados não; faça backup e planeje persistência/reconciliação antes de exigir durabilidade ou escala com múltiplas instâncias.
 
 ## 8. Plano de execução
 

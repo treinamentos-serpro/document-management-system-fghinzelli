@@ -1,4 +1,3 @@
-const path = require('node:path');
 const { defaultOwner } = require('../config');
 const documentsRepository = require('../repositories/documents.repository');
 
@@ -37,7 +36,7 @@ async function createDocument(file) {
     try {
       await documentsRepository.removeFile(document.storageKey);
     } catch (cleanupError) {
-      // A falha de limpeza não deve ocultar o erro original do registro.
+      console.error('Falha ao limpar arquivo após erro no registro:', cleanupError.code || 'UNKNOWN');
     }
     throw error;
   }
@@ -55,8 +54,8 @@ async function getDocumentForDownload(id) {
     throw error;
   }
 
-  const filePath = await documentsRepository.getFilePath(document.storageKey);
-  return { document, filePath: path.resolve(filePath) };
+  const file = await documentsRepository.openFile(document.storageKey);
+  return { document, ...file };
 }
 
 module.exports = {

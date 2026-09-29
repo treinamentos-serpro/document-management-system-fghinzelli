@@ -32,6 +32,7 @@ async function upload(req, res) {
     if (error.code === 'FILE_REQUIRED') {
       return sendError(res, 400, error.code, 'Envie um arquivo não vazio no campo file.');
     }
+    console.error('Falha no upload:', error.code || 'UNKNOWN');
     return sendError(res, 500, 'UPLOAD_FAILED', 'Não foi possível enviar o documento.');
   }
 }
@@ -41,6 +42,7 @@ async function list(req, res) {
     const documents = await documentsService.listDocuments();
     return res.status(200).json({ documents: documents.map(toPublicDocument) });
   } catch (error) {
+    console.error('Falha na listagem:', error.code || 'UNKNOWN');
     return sendError(res, 500, 'DOCUMENT_LIST_FAILED', 'Não foi possível listar os documentos.');
   }
 }
@@ -60,24 +62,26 @@ async function download(req, res) {
     if (error.code === 'DOCUMENT_FILE_NOT_FOUND') {
       return sendError(res, 404, error.code, 'O arquivo do documento não foi encontrado.');
     }
+    console.error('Falha ao abrir documento:', error.code || 'UNKNOWN');
     return sendError(res, 500, 'DOWNLOAD_FAILED', 'Não foi possível baixar o documento.');
   }
 
+  res.attachment(download.document.originalName);
   res.type('application/octet-stream');
-  return res.download(download.filePath, download.document.originalName, (error) => {
-    if (!error) {
-      return;
-    }
+  res.set('Content-Length', String(download.size));
+  const stream = download.fileHandle.createReadStream({ autoClose: true });
+  stream.on('error', (error) => {
+    console.error('Falha ao transmitir documento:', error.code || 'UNKNOWN');
     if (res.headersSent) {
       res.destroy(error);
       return;
     }
-    if (error.code === 'ENOENT') {
-      sendError(res, 404, 'DOCUMENT_FILE_NOT_FOUND', 'O arquivo do documento não foi encontrado.');
-      return;
-    }
+    res.removeHeader('Content-Disposition');
+    res.removeHeader('Content-Length');
     sendError(res, 500, 'DOWNLOAD_FAILED', 'Não foi possível baixar o documento.');
   });
+  res.on('close', () => stream.destroy());
+  stream.pipe(res);
 }
 
 function handleUploadError(error, res) {
@@ -87,6 +91,10 @@ function handleUploadError(error, res) {
   if (error.code === 'LIMIT_UNEXPECTED_FILE') {
     return sendError(res, 400, 'UNEXPECTED_FILE', 'Envie um único arquivo no campo file.');
   }
+  if (error.code === 'LIMIT_FIELD_COUNT' || error.code === 'LIMIT_FIELD_VALUE') {
+    return sendError(res, 400, 'INVALID_FIELD', 'Os campos adicionais excedem os limites permitidos.');
+  }
+  console.error('Falha ao processar multipart:', error.code || 'UNKNOWN');
   return sendError(res, 500, 'UPLOAD_FAILED', 'Não foi possível enviar o documento.');
 }
 
