@@ -36,6 +36,10 @@ test('o app backend é exportado e mantém o health check', async () => {
   const response = await fetch(`${baseUrl}/health`);
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { status: 'ok' });
+
+  const configResponse = await fetch(`${baseUrl}/config`);
+  assert.equal(configResponse.status, 200);
+  assert.deepEqual(await configResponse.json(), { maxFileSizeBytes: 1024 });
 });
 
 test('faz upload, lista e baixa um documento', async () => {
@@ -92,13 +96,85 @@ test('retorna erros estáveis para upload inválido e download inexistente', asy
   assert.equal(oversizedResponse.status, 413);
   assert.equal((await oversizedResponse.json()).error.code, 'FILE_TOO_LARGE');
 
+  const extraFieldForm = new FormData();
+  extraFieldForm.append('metadata', 'untrusted');
+  extraFieldForm.append('file', new Blob(['documento']), 'documento.txt');
+  const extraFieldResponse = await fetch(`${baseUrl}/upload`, {
+    method: 'POST',
+    body: extraFieldForm,
+  });
+  assert.equal(extraFieldResponse.status, 201);
+
+  const tooManyFieldsForm = new FormData();
+  for (let fieldIndex = 0; fieldIndex < 9; fieldIndex += 1) {
+    tooManyFieldsForm.append(`extra${fieldIndex}`, 'valor');
+  }
+  tooManyFieldsForm.append('file', new Blob(['documento']), 'documento.txt');
+  const tooManyFieldsResponse = await fetch(`${baseUrl}/upload`, {
+    method: 'POST',
+    body: tooManyFieldsForm,
+  });
+  assert.equal(tooManyFieldsResponse.status, 400);
+  assert.equal((await tooManyFieldsResponse.json()).error.code, 'INVALID_FIELD');
+
   const invalidIdResponse = await fetch(`${baseUrl}/documents/invalido/download`);
   assert.equal(invalidIdResponse.status, 400);
   assert.equal((await invalidIdResponse.json()).error.code, 'INVALID_DOCUMENT_ID');
+
+  const traversalResponse = await fetch(`${baseUrl}/documents/..%2F..%2Fprivate/download`);
+  assert.equal(traversalResponse.status, 400);
+  assert.equal((await traversalResponse.json()).error.code, 'INVALID_DOCUMENT_ID');
 
   const missingDocumentResponse = await fetch(
     `${baseUrl}/documents/00000000-0000-4000-8000-000000000000/download`,
   );
   assert.equal(missingDocumentResponse.status, 404);
   assert.equal((await missingDocumentResponse.json()).error.code, 'DOCUMENT_NOT_FOUND');
+});
+
+test('remove caminho do nome original sem usá-lo como nome no storage', async () => {
+  const form = new FormData();
+  form.append('file', new Blob(['dados']), '../fora.txt');
+  const response = await fetch(`${baseUrl}/upload`, { method: 'POST', body: form });
+  assert.equal(response.status, 201);
+  const document = await response.json();
+  assert.equal(document.originalName, 'fora.txt');
+  assert.equal(await fs.readFile(path.join(storageDir, document.id), 'utf8'), 'dados');
+});
+
+test('não baixa um link simbólico inserido no storage', async () => {
+  const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dms-outside-'));
+  try {
+    const outsideFile = path.join(outsideDir, 'private.txt');
+    await fs.writeFile(outsideFile, 'conteúdo privado');
+    const form = new FormData();
+    form.append('file', new Blob(['conteúdo original']), 'arquivo.txt');
+    const uploadResponse = await fetch(`${baseUrl}/upload`, { method: 'POST', body: form });
+    assert.equal(uploadResponse.status, 201);
+    const document = await uploadResponse.json();
+    const storedFile = path.join(storageDir, document.id);
+    await fs.rm(storedFile);
+    await fs.symlink(outsideFile, storedFile);
+
+    const response = await fetch(`${baseUrl}/documents/${document.id}/download`);
+    assert.equal(response.status, 404);
+    assert.equal((await response.json()).error.code, 'DOCUMENT_FILE_NOT_FOUND');
+  } finally {
+    await fs.rm(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('retorna erro de arquivo ausente sem expor caminhos locais', async () => {
+  const form = new FormData();
+  form.append('file', new Blob(['documento']), 'apagado.txt');
+  const uploadResponse = await fetch(`${baseUrl}/upload`, { method: 'POST', body: form });
+  assert.equal(uploadResponse.status, 201);
+  const document = await uploadResponse.json();
+  await fs.rm(path.join(storageDir, document.id));
+
+  const response = await fetch(`${baseUrl}/documents/${document.id}/download`);
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), {
+    error: { code: 'DOCUMENT_FILE_NOT_FOUND', message: 'O arquivo do documento não foi encontrado.' },
+  });
 });

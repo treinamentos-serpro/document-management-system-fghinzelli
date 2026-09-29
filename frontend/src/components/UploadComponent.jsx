@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { uploadDocument } from '../services/documentsApi.js';
+import { formatFileSize } from '../utils/formatFileSize.js';
 
-export default function UploadComponent({ onUploaded }) {
+export default function UploadComponent({ onUploaded, maxFileSizeBytes }) {
   const inputRef = useRef(null);
   const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -55,7 +56,7 @@ export default function UploadComponent({ onUploaded }) {
           <span className="file-picker-symbol" aria-hidden="true">+</span>
           <span className="file-picker-copy">
             <strong>{file ? file.name : 'Selecionar arquivo'}</strong>
-            <small>{file ? formatFileSize(file.size) : 'Até 10 MB por arquivo'}</small>
+            <small>{file ? formatFileSize(file.size) : maxFileSizeBytes ? `Até ${formatFileSize(maxFileSizeBytes)} por arquivo` : 'Limite definido pelo servidor'}</small>
           </span>
           <span className="file-picker-action">ESCOLHER</span>
         </label>
@@ -69,14 +70,4 @@ export default function UploadComponent({ onUploaded }) {
       </form>
     </section>
   );
-}
-
-function formatFileSize(size) {
-  if (size < 1024) {
-    return `${size} bytes`;
-  }
-  if (size < 1024 * 1024) {
-    return `${(size / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} KB`;
-  }
-  return `${(size / (1024 * 1024)).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB`;
 }
